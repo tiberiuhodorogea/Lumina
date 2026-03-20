@@ -28,17 +28,18 @@
         <div class="quality-panel">
           <div class="quality-panel-header">
             <h3>Streaming Profile</h3>
-            <span id="profileHint" class="profile-hint">Balanced for most sessions</span>
+            <span id="profileHint" class="profile-hint">Maximum resolution and bitrate</span>
           </div>
           <div class="form-group">
             <label>Quality Preset:</label>
             <select id="qualityProfile">
-              <option value="balanced">Balanced</option>
-              <option value="performance">Performance</option>
-              <option value="quality">Quality</option>
+              <option value="performance">Performance (720p)</option>
+              <option value="balanced">Balanced (1080p)</option>
+              <option value="quality">Quality (1080p)</option>
+              <option value="ultra" selected>Ultra (2K)</option>
             </select>
           </div>
-          <div class="profile-summary" id="profileSummary">1920x1080 cap, 60 fps target, 16 Mbps cap</div>
+          <div class="profile-summary" id="profileSummary">2K (1440p) / 60 fps / 20 Mbps cap</div>
         </div>
         <label class="toggle-row" for="includeAudio">
           <span>Include source audio</span>
@@ -62,7 +63,7 @@
         <div class="stream-info">
           <div class="info-item">
             <span class="label">Profile:</span>
-            <span id="activeProfile" class="value">Balanced</span>
+            <span id="activeProfile" class="value">Ultra (2K)</span>
           </div>
           <div class="info-item">
             <span class="label">Audio:</span>

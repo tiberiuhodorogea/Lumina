@@ -207,7 +207,7 @@ const QUALITY_PROFILES = {
   performance: {
     label: 'Performance',
     hint: 'Lower resolution, smooth framerate',
-    summary: '720p, 60 fps target, 8 Mbps cap',
+    summary: '720p / 60 fps / 8 Mbps cap',
     maxWidth: 1280,
     maxHeight: 720,
     maxFrameRate: 60,
@@ -215,21 +215,30 @@ const QUALITY_PROFILES = {
   },
   balanced: {
     label: 'Balanced',
-    hint: 'Best effort 1080p, targets 30+ fps',
-    summary: '1080p, 60 fps target, 16 Mbps cap',
+    hint: '1080p with conservative bitrate',
+    summary: '1080p / 60 fps / 12 Mbps cap',
     maxWidth: 1920,
     maxHeight: 1080,
     maxFrameRate: 60,
-    maxBitrate: 16_000_000,
+    maxBitrate: 12_000_000,
   },
   quality: {
     label: 'Quality',
-    hint: 'Push bitrate for sharp 1080p',
-    summary: '1080p, 60 fps target, 24 Mbps cap',
+    hint: 'Sharp 1080p, high bitrate',
+    summary: '1080p / 60 fps / 20 Mbps cap',
     maxWidth: 1920,
     maxHeight: 1080,
     maxFrameRate: 60,
-    maxBitrate: 24_000_000,
+    maxBitrate: 20_000_000,
+  },
+  ultra: {
+    label: 'Ultra (2K)',
+    hint: 'Maximum resolution and bitrate',
+    summary: '2K (1440p) / 60 fps / 20 Mbps cap',
+    maxWidth: 2560,
+    maxHeight: 1440,
+    maxFrameRate: 60,
+    maxBitrate: 20_000_000,
   }
 };
 
@@ -246,7 +255,7 @@ class StreamerApp {
       this.audioProducer = null;   // mediasoup Producer (audio)
       this.localStream = null;
       this.captureProfile = null;
-      this.selectedProfileKey = 'balanced';
+      this.selectedProfileKey = 'ultra';
       this.includeAudio = true;
       this.isBroadcasting = false;
       this.streamerName = '';
