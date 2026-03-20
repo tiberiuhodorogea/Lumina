@@ -637,6 +637,15 @@ class ViewerApp {
 
         if (fps !== null && this.socket && this.selectedStreamer) {
           const lossRate = intervalLossRate != null ? intervalLossRate : 0;
+
+          // Suppress stale reports — if 3+ consecutive fps=0, stop flooding the server
+          if (fps === 0) {
+            this._zeroFpsCount = (this._zeroFpsCount || 0) + 1;
+            if (this._zeroFpsCount >= 3) return;
+          } else {
+            this._zeroFpsCount = 0;
+          }
+
           this.socket.emit('viewer-quality-report', {
             streamerId: this.selectedStreamer,
             fps, bitrateMbps, frameWidth, frameHeight, jitterMs,

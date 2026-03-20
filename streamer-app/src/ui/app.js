@@ -852,6 +852,8 @@ class StreamerApp {
         }
       }
 
+      this._lastSourceId = sourceId;
+
       if (sourceId.startsWith('window:') && window.electron?.prepareForCapture) {
         logger.info('Minimizing streamer window before window capture');
         await window.electron.prepareForCapture();
@@ -889,7 +891,7 @@ class StreamerApp {
             scaleResolutionDownBy: 1.0,
           }],
           codecOptions: {
-            videoGoogleStartBitrate: 1000,
+            videoGoogleStartBitrate: 10000,
           },
         });
 
@@ -949,6 +951,7 @@ class StreamerApp {
       });
 
       this.startStatsCollection();
+      this._startSourceHealthCheck();
       logger.info('[SFU] Stream live — server forwards to all viewers (single encoder!)');
 
     } catch (error) {
@@ -1071,10 +1074,84 @@ class StreamerApp {
     }
   }
 
+  /**
+   * Monitors encoded-frame count. If no new frames for ~2s,
+   * automatically re-acquires the capture source (handles alt-tab / minimise).
+   */
+  _startSourceHealthCheck() {
+    if (this._healthInterval) clearInterval(this._healthInterval);
+    this._healthStalls = 0;
+
+    this._healthInterval = setInterval(async () => {
+      if (!this.videoProducer || !this.videoProducer.rtpSender) return;
+
+      try {
+        const stats = await this.videoProducer.getStats();
+        let framesEncoded = 0;
+        stats.forEach(r => {
+          if (r.type === 'outbound-rtp' && r.kind === 'video') {
+            framesEncoded = r.framesEncoded || 0;
+          }
+        });
+
+        if (this._healthPrevFrames !== undefined && framesEncoded === this._healthPrevFrames) {
+          this._healthStalls++;
+          if (this._healthStalls >= 2) {
+            logger.warn('[HEALTH] No new frames for ~' + this._healthStalls + 's — re-acquiring source');
+            await this._reacquireCaptureSource();
+            this._healthStalls = 0;
+          }
+        } else {
+          this._healthStalls = 0;
+        }
+        this._healthPrevFrames = framesEncoded;
+      } catch (_) { /* ignore */ }
+    }, 1000);
+  }
+
+  _stopSourceHealthCheck() {
+    if (this._healthInterval) {
+      clearInterval(this._healthInterval);
+      this._healthInterval = null;
+    }
+  }
+
+  async _reacquireCaptureSource() {
+    if (!this.videoProducer || !this.videoProducer.rtpSender) return;
+
+    try {
+      // Determine source — game captures use screen, otherwise original sourceId
+      let sourceId = this._lastSourceId;
+      if (this._isGameCapture) {
+        const screenId = await this._findScreenSource();
+        if (screenId) sourceId = screenId;
+      }
+      if (!sourceId) return;
+
+      const newStream = await this.captureSourceStream(sourceId);
+      const newTrack = newStream.getVideoTracks()[0];
+      if (!newTrack) return;
+
+      newTrack.contentHint = 'motion';
+      await this.videoProducer.rtpSender.replaceTrack(newTrack);
+
+      // Stop old tracks
+      if (this.localStream) {
+        this.localStream.getVideoTracks().forEach(t => t.stop());
+      }
+      this.localStream = newStream;
+
+      logger.info('[HEALTH] Capture source re-acquired successfully');
+    } catch (e) {
+      logger.warn('[HEALTH] Re-acquire failed: ' + e.message);
+    }
+  }
+
   stopStreaming() {
     logger.info('Stopping stream...');
 
-    // Stop native game capture if active
+    // Stop health check and native game capture
+    this._stopSourceHealthCheck();
     if (this._isGameCapture && window.electron?.stopNativeCapture) {
       window.electron.stopNativeCapture().catch(() => {});
     }

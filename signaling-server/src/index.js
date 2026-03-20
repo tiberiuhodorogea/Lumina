@@ -513,6 +513,15 @@ function handleViewerQualityReport(clientId, data) {
   const room = rooms.get(client?.roomId);
   if (!room) return;
 
+  // Drop stale reports (fps=0 means stream ended for this viewer)
+  if (data.fps === 0) {
+    if (!client._zeroFpsCount) client._zeroFpsCount = 0;
+    client._zeroFpsCount++;
+    if (client._zeroFpsCount >= 3) return; // silently discard
+  } else {
+    client._zeroFpsCount = 0;
+  }
+
   console.log(
     '[DIAG:QR] viewer=' + clientId +
     ' fps=' + data.fps +
