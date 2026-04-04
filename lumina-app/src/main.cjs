@@ -10,7 +10,7 @@ app.commandLine.appendSwitch('enable-features',
   'WebRtcAllowWgcWindowCapturer,WebRtcAllowWgcScreenCapturer');
 
 let mainWindow;
-const APP_CAPTURE_NAMES = new Set(['Lumina Studio', 'Lumina']);
+const APP_CAPTURE_NAMES = new Set(['Lumina Streamer', 'Lumina']);
 const SHOULD_OPEN_DEVTOOLS = process.env.LUMINA_DEVTOOLS === '1';
 
 // ========== SESSION LOGGING (writes to same session dir as signaling server) ==========

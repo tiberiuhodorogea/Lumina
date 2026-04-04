@@ -1,7 +1,7 @@
 {
   "name": "signaling-server",
   "version": "0.1.0",
-  "description": "WebRTC signaling server",
+  "description": "Signaling and SFU service for Lumina",
   "main": "src/index.js",
   "type": "module",
   "scripts": {

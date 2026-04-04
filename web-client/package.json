@@ -1,7 +1,7 @@
 {
   "name": "web-client",
   "version": "0.1.0",
-  "description": "Web viewer client for P2P streaming",
+  "description": "Browser viewer for Lumina streams",
   "type": "module",
   "scripts": {
     "start": "npx http-server -p 3000 -o",

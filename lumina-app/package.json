@@ -1,7 +1,7 @@
 {
   "name": "lumina-app",
   "version": "0.1.0",
-  "description": "Lumina - Electron streaming application",
+  "description": "Windows streamer desktop app for Lumina",
   "main": "src/main.cjs",
   "scripts": {
     "start": "electron .",

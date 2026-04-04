@@ -1,207 +1,91 @@
 # Lumina
 
-Low-latency peer-to-peer streaming stack for sharing games, apps, browser windows, or the entire desktop with friends.
+Lumina is a low-latency desktop streaming stack made of three runnable pieces:
 
-## What It Does
+- a Windows Electron streamer app
+- a browser viewer
+- a Node.js signaling and SFU service
 
-- Windows Lumina App built with Electron
-- Browser-based viewer client for desktop and mobile
-- WebRTC peer-to-peer video delivery
-- Signaling server for discovery, offers, answers, and ICE relay
-- Capture source selection:
-	- entire screen
-	- individual windows/apps
-- Streaming quality profiles:
-	- Smooth FPS
-	- Balanced
-	- High Quality
-	- Ultra
-- Real-time streamer stats:
-	- viewer count
-	- bitrate
-	- FPS
-- Viewer controls:
-	- mute/unmute
-	- fullscreen
-	- native playback controls
-- LAN viewing support and browser viewing from other devices
-- Best-effort source audio capture with fallback to video-only when the source cannot provide audio
+The current implementation is not pure peer-to-peer. The server uses mediasoup, so signaling and media routing both live in the backend while viewers receive media through consumer transports.
 
-## Current Architecture
+## What Stays In This Repo
 
-```
-streamer/
-├── signaling-server/    # Node.js signaling service
-├── lumina-app/        # Lumina App (Windows)
-├── web-client/          # Browser viewer
-├── shared/              # Shared package/config
-├── ARCHITECTURE.md
-├── QUICKSTART.md
-└── package.json
-```
+- `signaling-server/`: WebSocket signaling, mediasoup worker, room state, session logs
+- `lumina-app/`: Windows streamer UI, capture source selection, media production, optional native helpers
+- `web-client/`: Browser viewer UI and mediasoup consumer logic
+- `shared/`: shared runtime configuration
+- `ARCHITECTURE.md`: implementation-focused system notes
 
-## How It Works
-
-1. The Lumina App connects to the signaling server and registers a stream.
-2. A viewer opens the web client and discovers active streams.
-3. The signaling server relays WebRTC offers, answers, and ICE candidates.
-4. Video and optional source audio flow directly over WebRTC between streamer and viewer.
-
-## Components
-
-### `signaling-server`
-
-- Node.js server
-- HTTP endpoints for health and stream discovery
-- Raw WebSocket signaling path used by the current app flow
-- Listens on port `4000`
-
-### `lumina-app`
-
-- Electron desktop app for Windows
-- Lets you:
-	- connect to signaling
-	- pick a streaming profile
-	- choose whether to include source audio
-	- select a capture source
-	- stream to multiple viewers
-
-### `web-client`
-
-- Browser viewer
-- Works on desktop and mobile browsers
-- Lets a viewer:
-	- connect to the signaling server
-	- choose a live stream
-	- watch video in fullscreen
-	- mute/unmute locally
+The older duplicate docs, helper wrappers, and unused legacy entrypoints were removed to keep the repo surface smaller and more accurate.
 
 ## Requirements
 
 - Node.js 18+
-- Windows for the Lumina App
-- A modern Chromium-based browser is recommended for viewers
+- Windows for the streamer app
+- A modern browser for the viewer
 
 ## Install
 
-From the project root:
+From the repository root:
 
 ```bash
 npm install
 ```
 
-If needed, install workspace dependencies explicitly:
-
-```bash
-npm install --workspaces
-```
-
 ## Run
 
-### Terminal 1: signaling server
+Use three terminals from the repository root:
 
 ```bash
 npm run start:signaling
+npm run start:streamer
+npm run start:viewer
 ```
 
-### Terminal 2: Lumina App
+Viewer URL:
 
-```bash
-npm run start:lumina
-```
+- local: `http://localhost:3000`
+- LAN: `http://YOUR_LAN_IP:3000`
 
-### Terminal 3: viewer web app
-
-```bash
-npm run start:web
-```
-
-Open:
-
-- local viewer: `http://localhost:3000`
-- phone/LAN viewer: `http://YOUR_LAN_IP:3000`
-
-Use signaling URLs:
+Signaling URL:
 
 - local: `ws://localhost:4000`
-- LAN/mobile: `ws://YOUR_LAN_IP:4000`
+- LAN: `ws://YOUR_LAN_IP:4000`
 
-## Typical Usage
+## Basic Flow
 
-### Lumina Host
+1. Start the signaling service.
+2. Start Lumina Streamer on Windows.
+3. Connect the streamer to the signaling URL and start a source.
+4. Open Lumina Viewer in a browser.
+5. Connect to the same signaling URL and join the live stream.
 
-1. Launch the signaling server.
-2. Launch the Lumina App.
-3. Enter the signaling URL.
-4. Enter a stream name.
-5. Pick a streaming profile.
-6. Enable or disable source audio.
-7. Connect.
-8. Select a source and start streaming.
+## Repository Layout
 
-### Viewer
-
-1. Open the web client.
-2. Enter the signaling URL.
-3. Connect.
-4. Choose a stream.
-5. Use fullscreen or mute if needed.
-
-## Streaming Profiles
-
-The Lumina App includes four presets.
-
-- `Smooth FPS`
-	- prioritizes responsiveness and lower decode cost
-- `Balanced`
-	- default profile for general use
-- `High Quality`
-	- pushes quality harder on strong links
-- `Ultra`
-	- highest quality target for excellent hardware/network conditions
-
-## Audio Notes
-
-- Source audio is best-effort.
-- Some sources can provide audio cleanly.
-- Some window capture paths may expose video but not audio.
-- When source audio is unavailable, the app falls back to video-only.
-- To avoid feedback loops, keep local viewers muted if they are playing the same stream near the source machine.
-
-## Remote Access
-
-For internet access beyond LAN, you will typically need:
-
-- a publicly reachable signaling server
-- firewall rules for port `4000`
-- static hosting or forwarding for the viewer app on port `3000`
-- NAT traversal considerations for WebRTC peers
-
-The current build is good for local and controlled remote testing, but production-grade internet delivery will still need harder NAT and reliability work.
-
-## Known Limitations
-
-- A/V sync under long-running load may still need more adaptive latency work
-- Source audio availability depends on the capture target and platform/browser behavior
-- Individual app/window capture support varies by Windows and Chromium capture capabilities
-- Electron may log GPU warnings that do not always indicate functional failure
-
-## Scripts
-
-Top-level scripts:
-
-```bash
-npm run start:signaling
-npm run start:lumina
-npm run start:web
+```text
+.
+├─ signaling-server/
+│  └─ src/index.js
+├─ lumina-app/
+│  ├─ src/main.cjs
+│  ├─ src/preload.cjs
+│  ├─ src/ui/
+│  └─ native/
+├─ web-client/
+│  ├─ index.html
+│  └─ app.js
+├─ shared/
+│  └─ config.js
+├─ ARCHITECTURE.md
+└─ package.json
 ```
 
-## Additional Docs
+## Notes
 
-- `ARCHITECTURE.md`
-- `QUICKSTART.md`
-- `TECH-STACK.md`
-- `INDEX.md`
+- The streamer supports screen and window capture, with optional process-audio support through the native addon.
+- The viewer and streamer both use a bundled `mediasoup-client` browser build.
+- Session logs are written under `logs/sessions/`.
+- The baseline summaries under `logs/baselines/` look like analysis artifacts, not runtime dependencies.
 
 ## License
 
