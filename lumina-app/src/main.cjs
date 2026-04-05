@@ -432,14 +432,22 @@ ipcMain.handle('start-native-video-capture', async (_event, opts) => {
         try {
           if (!mainWindow || mainWindow.isDestroyed()) return;
           frameCount++;
+          const forwardedAtEpochMs = Date.now();
+          const forwardedMeta = {
+            ...meta,
+            mainForwardedAtEpochMs: forwardedAtEpochMs,
+            captureToMainMs: meta?.epochTimestampUs
+              ? Math.max(0, forwardedAtEpochMs - (meta.epochTimestampUs / 1000))
+              : null,
+          };
           if (frameCount === 1) {
-            console.log('[VIDEO-IPC] First video frame: ' + meta.width + 'x' + meta.height +
-              ' stride=' + meta.stride + ' bytes=' + pixels.byteLength);
+            console.log('[VIDEO-IPC] First video frame: ' + forwardedMeta.width + 'x' + forwardedMeta.height +
+              ' stride=' + forwardedMeta.stride + ' bytes=' + pixels.byteLength);
           } else if (frameCount % 300 === 0) {
             console.log('[VIDEO-IPC] Video frame #' + frameCount);
           }
           // Transfer the ArrayBuffer to the renderer (avoids copy)
-          mainWindow.webContents.send('game-video-frame', pixels.buffer, meta);
+          mainWindow.webContents.send('game-video-frame', pixels.buffer, forwardedMeta);
         } catch (error) {
           if (frameCount <= 3) {
             console.warn('[VIDEO-IPC] Frame forwarding failed:', error.message);

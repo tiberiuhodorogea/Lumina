@@ -1,26 +1,26 @@
 {
-  "label": "Active baseline after stale-viewer fix",
+  "label": "Active baseline after native handoff tuning",
   "date": "2026-04-05",
-  "commit": "d08f5dd",
-  "sessionDir": "2026-04-05T06-20-16-832Z-d08f5dd",
-  "sessionDurationSec": 174.6,
-  "refreshRequiredCount": 1,
+  "commit": "677fc60",
+  "sessionDir": "2026-04-05T08-03-00-284Z-677fc60",
+  "sessionDurationSec": 203.7,
+  "refreshRequiredCount": 0,
   "viewerBuildId": "viewer-sfu-3",
   "streamer": {
-    "bitrateMbps": { "avg": 9.65, "min": 2.4, "max": 12.64 },
-    "fps": { "avg": 57.8, "min": 44, "max": 60 }
+    "bitrateMbps": { "avg": 9.47, "min": 1.23, "max": 12.64 },
+    "fps": { "avg": 54.45, "min": 41, "max": 60 }
   },
   "viewer": {
-    "bitrateMbps": { "avg": 9.79, "min": 0.31, "max": 14.44 },
-    "fps": { "avg": 57.74, "min": 36, "max": 73 },
-    "jitterBufferDelayMs": { "avg": 71.22, "min": 8.5, "max": 82.3 },
-    "decodeLatencyMs": { "avg": 6.04, "min": 4.4, "max": 7.3 }
+    "bitrateMbps": { "avg": 9.64, "min": 0.91, "max": 13.93 },
+    "fps": { "avg": 53.68, "min": 6, "max": 65 },
+    "jitterBufferDelayMs": { "avg": 40.51, "min": 13.9, "max": 57.2 },
+    "decodeLatencyMs": { "avg": 5.16, "min": 3.2, "max": 5.9 }
   },
   "notes": [
-    "This session is the retained comparison point for future tuning runs.",
-    "The stale viewer was rejected once, then rejoined with viewer build provenance populated.",
-    "The stream upgraded to FULL and held 1600x900 without any ABR degrade.",
-    "Native capture stayed healthy with zero queue drops.",
-    "The remaining quality gap is receiver-side buffering: the viewer jitter buffer climbed into the mid/high-70 ms range and did not drain."
+    "This session is the retained comparison point for the next tuning loop.",
+    "Startup stayed low-latency and the stream recovered from FLOW to FULL without any viewer refresh.",
+    "Viewer jitter buffer averaged about 40.5 ms, materially lower than the earlier 06:20 and 07:35 retained comparisons.",
+    "Native capture stayed healthy with zero queue drops, but renderer backpressure still logged 38 events with 985 stale-frame drops by the end of the run.",
+    "The remaining gap is sender-side encoder behavior: after briefly reaching 1600x900 in FULL, outbound resolution drifted to 1200x675 while ABR still reported FULL."
   ]
 }

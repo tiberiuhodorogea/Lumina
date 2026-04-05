@@ -1094,7 +1094,12 @@ function handleViewerQualityReport(clientId, data) {
     ' bitrate=' + data.bitrateMbps + 'Mbps' +
     ' res=' + data.frameWidth + 'x' + data.frameHeight +
     ' jitter=' + (data.jitterMs != null ? data.jitterMs : '--') + 'ms' +
-    ' loss=' + (data.lossRate != null ? (data.lossRate * 100).toFixed(1) + '%' : '--')
+    ' loss=' + (data.lossRate != null ? (data.lossRate * 100).toFixed(1) + '%' : '--') +
+    ' jbuf=' + (data.jitterBufferDelayMs != null ? data.jitterBufferDelayMs : '--') + 'ms' +
+    ' jdelta=' + (data.jitterBufferDeltaMs != null ? data.jitterBufferDeltaMs : '--') + 'ms' +
+    ' play=' + (data.videoCurrentTimeDeltaMs != null ? data.videoCurrentTimeDeltaMs : '--') + 'ms/s' +
+    ' render=' + (data.renderedFramesDelta != null ? data.renderedFramesDelta : '--') + 'f' +
+    ' ready=' + (data.videoReadyState != null ? data.videoReadyState : '--')
   );
 
   appendSessionLog('viewer-quality-report', {
@@ -1113,7 +1118,15 @@ function handleViewerQualityReport(clientId, data) {
     lossRate: data.lossRate,
     droppedFramesDelta: data.droppedFramesDelta,
     jitterBufferDelayMs: data.jitterBufferDelayMs,
+    jitterBufferDeltaMs: data.jitterBufferDeltaMs,
     decodeLatencyMs: data.decodeLatencyMs,
+    renderedFramesDelta: data.renderedFramesDelta,
+    totalVideoFrames: data.totalVideoFrames,
+    videoCurrentTimeSec: data.videoCurrentTimeSec,
+    videoCurrentTimeDeltaMs: data.videoCurrentTimeDeltaMs,
+    videoPlaybackRate: data.videoPlaybackRate,
+    videoReadyState: data.videoReadyState,
+    receiverPlayoutDelayHintMs: data.receiverPlayoutDelayHintMs,
   });
 
   if (viewer) {
@@ -1123,8 +1136,16 @@ function handleViewerQualityReport(clientId, data) {
       jitterMs: data.jitterMs,
       lossRate: data.lossRate,
       droppedFramesDelta: data.droppedFramesDelta || 0,
-      jitterBufferDelayMs: data.jitterBufferDelayMs || null,
-      decodeLatencyMs: data.decodeLatencyMs || null,
+      jitterBufferDelayMs: data.jitterBufferDelayMs ?? null,
+      jitterBufferDeltaMs: data.jitterBufferDeltaMs ?? null,
+      decodeLatencyMs: data.decodeLatencyMs ?? null,
+      renderedFramesDelta: data.renderedFramesDelta ?? null,
+      totalVideoFrames: data.totalVideoFrames ?? null,
+      videoCurrentTimeSec: data.videoCurrentTimeSec ?? null,
+      videoCurrentTimeDeltaMs: data.videoCurrentTimeDeltaMs ?? null,
+      videoPlaybackRate: data.videoPlaybackRate ?? null,
+      videoReadyState: data.videoReadyState ?? null,
+      receiverPlayoutDelayHintMs: data.receiverPlayoutDelayHintMs ?? null,
       at: Date.now(),
     };
   }
@@ -1140,7 +1161,15 @@ function handleViewerQualityReport(clientId, data) {
     lossRate: data.lossRate,
     droppedFramesDelta: data.droppedFramesDelta,
     jitterBufferDelayMs: data.jitterBufferDelayMs,
+    jitterBufferDeltaMs: data.jitterBufferDeltaMs,
     decodeLatencyMs: data.decodeLatencyMs,
+    renderedFramesDelta: data.renderedFramesDelta,
+    totalVideoFrames: data.totalVideoFrames,
+    videoCurrentTimeSec: data.videoCurrentTimeSec,
+    videoCurrentTimeDeltaMs: data.videoCurrentTimeDeltaMs,
+    videoPlaybackRate: data.videoPlaybackRate,
+    videoReadyState: data.videoReadyState,
+    receiverPlayoutDelayHintMs: data.receiverPlayoutDelayHintMs,
   });
   // Keep last 10000 samples max
   if (sessionStats.qualityReportSamples.length > 10000) {
@@ -1158,7 +1187,15 @@ function handleViewerQualityReport(clientId, data) {
     lossRate: data.lossRate,
     droppedFramesDelta: data.droppedFramesDelta,
     jitterBufferDelayMs: data.jitterBufferDelayMs,
+    jitterBufferDeltaMs: data.jitterBufferDeltaMs,
     decodeLatencyMs: data.decodeLatencyMs,
+    renderedFramesDelta: data.renderedFramesDelta,
+    totalVideoFrames: data.totalVideoFrames,
+    videoCurrentTimeSec: data.videoCurrentTimeSec,
+    videoCurrentTimeDeltaMs: data.videoCurrentTimeDeltaMs,
+    videoPlaybackRate: data.videoPlaybackRate,
+    videoReadyState: data.videoReadyState,
+    receiverPlayoutDelayHintMs: data.receiverPlayoutDelayHintMs,
   });
 }
 

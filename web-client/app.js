@@ -804,7 +804,10 @@ class ViewerApp {
     if (this.statsInterval) clearInterval(this.statsInterval);
     this._prevBytesReceived = 0;
     this._prevFramesDecoded = 0;
+    this._prevRenderedFrames = null;
+    this._prevVideoCurrentTime = null;
     this._prevStatsTimestamp = 0;
+    this._prevJitterBufferDelayMs = null;
 
     this.statsInterval = setInterval(async () => {
       try {
@@ -830,6 +833,11 @@ class ViewerApp {
 
         if (!inboundVideo) return;
 
+        const video = document.getElementById('remoteVideo');
+        const playbackQuality = video && typeof video.getVideoPlaybackQuality === 'function'
+          ? video.getVideoPlaybackQuality()
+          : null;
+
         const now = inboundVideo.timestamp;
         const frameWidth = inboundVideo.frameWidth || 0;
         const frameHeight = inboundVideo.frameHeight || 0;
@@ -845,10 +853,27 @@ class ViewerApp {
           ? Number(((inboundVideo.jitterBufferDelay / inboundVideo.jitterBufferEmittedCount) * 1000).toFixed(1)) : null;
         const decodeLatencyMs = inboundVideo.totalDecodeTime != null && framesDecoded > 0
           ? Number(((inboundVideo.totalDecodeTime / framesDecoded) * 1000).toFixed(1)) : null;
+        const receiverPlayoutDelayHintMs = videoConsumer.rtpReceiver && typeof videoConsumer.rtpReceiver.playoutDelayHint === 'number'
+          ? Number((videoConsumer.rtpReceiver.playoutDelayHint * 1000).toFixed(1)) : null;
+        const videoCurrentTimeSec = video && Number.isFinite(video.currentTime)
+          ? Number(video.currentTime.toFixed(3))
+          : null;
+        const videoPlaybackRate = video && Number.isFinite(video.playbackRate)
+          ? Number(video.playbackRate.toFixed(2))
+          : null;
+        const videoReadyState = video && typeof video.readyState === 'number'
+          ? video.readyState
+          : null;
+        const totalVideoFrames = playbackQuality && Number.isFinite(playbackQuality.totalVideoFrames)
+          ? playbackQuality.totalVideoFrames
+          : null;
 
         let fps = null;
         let bitrateMbps = null;
         let intervalLossRate = null;
+        let jitterBufferDeltaMs = null;
+        let renderedFramesDelta = null;
+        let videoCurrentTimeDeltaMs = null;
 
         if (this._prevStatsTimestamp > 0) {
           const elapsed = (now - this._prevStatsTimestamp) / 1000;
@@ -865,6 +890,16 @@ class ViewerApp {
             const recvDelta = packetsReceived - (this._prevPacketsReceived || 0);
             const totalDelta = lostDelta + recvDelta;
             intervalLossRate = totalDelta > 0 ? Math.max(0, lostDelta) / totalDelta : 0;
+
+            if (jitterBufferDelayMs != null && this._prevJitterBufferDelayMs != null) {
+              jitterBufferDeltaMs = Number((jitterBufferDelayMs - this._prevJitterBufferDelayMs).toFixed(1));
+            }
+            if (totalVideoFrames != null && this._prevRenderedFrames != null) {
+              renderedFramesDelta = Math.max(0, totalVideoFrames - this._prevRenderedFrames);
+            }
+            if (videoCurrentTimeSec != null && this._prevVideoCurrentTime != null) {
+              videoCurrentTimeDeltaMs = Number(((videoCurrentTimeSec - this._prevVideoCurrentTime) * 1000).toFixed(1));
+            }
           }
         }
 
@@ -876,6 +911,9 @@ class ViewerApp {
         this._prevPacketsLost = packetsLost;
         this._prevPacketsReceived = packetsReceived;
         this._prevStatsTimestamp = now;
+        this._prevJitterBufferDelayMs = jitterBufferDelayMs;
+        this._prevRenderedFrames = totalVideoFrames;
+        this._prevVideoCurrentTime = videoCurrentTimeSec;
 
         if (frameWidth && frameHeight) {
           document.getElementById('resolution').textContent = frameWidth + 'x' + frameHeight;
@@ -912,7 +950,15 @@ class ViewerApp {
             lossRate: Number(lossRate.toFixed(4)),
             droppedFramesDelta,
             jitterBufferDelayMs,
+            jitterBufferDeltaMs,
             decodeLatencyMs,
+            renderedFramesDelta,
+            totalVideoFrames,
+            videoCurrentTimeSec,
+            videoCurrentTimeDeltaMs,
+            videoPlaybackRate,
+            videoReadyState,
+            receiverPlayoutDelayHintMs,
             signalingSessionId: this.signalingSessionInfo?.sessionId || null,
             reportedAtIso: new Date().toISOString(),
             viewerBuildId: VIEWER_BUILD_ID,
@@ -928,10 +974,16 @@ class ViewerApp {
               ' fps=' + fps + ' bitrate=' + bitrateMbps + 'Mbps' +
               ' jitter=' + (jitterMs != null ? jitterMs : '--') + 'ms' +
               ' jbuf=' + (jitterBufferDelayMs != null ? jitterBufferDelayMs : '--') + 'ms' +
+              ' jdelta=' + (jitterBufferDeltaMs != null ? jitterBufferDeltaMs : '--') + 'ms' +
               ' decode=' + (decodeLatencyMs != null ? decodeLatencyMs : '--') + 'ms' +
+              ' play=' + (videoCurrentTimeDeltaMs != null ? videoCurrentTimeDeltaMs : '--') + 'ms/s' +
+              ' render=' + (renderedFramesDelta != null ? renderedFramesDelta : '--') + 'f' +
+              ' ready=' + (videoReadyState != null ? videoReadyState : '--') +
+              ' rate=' + (videoPlaybackRate != null ? videoPlaybackRate : '--') +
               ' dropped=' + framesDropped + ' lost=' + packetsLost +
               '/' + packetsReceived + 'pkts' +
-              ' nack=' + nackCount + ' pli=' + pliCount + ' fir=' + firCount
+              ' nack=' + nackCount + ' pli=' + pliCount + ' fir=' + firCount +
+              ' hint=' + (receiverPlayoutDelayHintMs != null ? receiverPlayoutDelayHintMs : '--') + 'ms'
             );
           }
         }
