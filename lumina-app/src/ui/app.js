@@ -2333,12 +2333,14 @@ class LuminaApp {
   async _startNativeVideoCapture(profile) {
     if (!window.electron?.isNativeVideoCaptureAvailable) {
       logger.warn('[NATIVE-VIDEO] API not exposed in preload');
+      if (window.electron?.sessionLog) window.electron.sessionLog('native-capture-unavailable', { reason: 'api-not-exposed' });
       return null;
     }
 
     const available = await window.electron.isNativeVideoCaptureAvailable();
     if (!available) {
       logger.warn('[NATIVE-VIDEO] Native video capture not available (addon not built?)');
+      if (window.electron?.sessionLog) window.electron.sessionLog('native-capture-unavailable', { reason: 'addon-not-built' });
       return null;
     }
 
@@ -2348,6 +2350,7 @@ class LuminaApp {
     const result = await window.electron.startNativeVideoCapture({ fps: targetFps, maxWidth, maxHeight });
     if (!result || !result.success) {
       logger.warn('[NATIVE-VIDEO] Start failed: ' + (result?.reason || 'unknown'));
+      if (window.electron?.sessionLog) window.electron.sessionLog('native-capture-unavailable', { reason: result?.reason || 'start-failed' });
       return null;
     }
 

@@ -416,7 +416,8 @@ ipcMain.handle('stop-native-process-audio', async () => {
 // ========== NATIVE VIDEO CAPTURE (DXGI Desktop Duplication) ==========
 
 ipcMain.handle('native-video-capture-available', () => {
-  return !!(nativeCapture && typeof nativeCapture.startVideoCapture === 'function');
+  // Use the wrapper's `available` flag (= !!addon) so stubs don't produce a false positive
+  return !!(nativeCapture && nativeCapture.available === true);
 });
 
 ipcMain.handle('start-native-video-capture', async (_event, opts) => {
