@@ -429,11 +429,31 @@ ipcMain.handle('start-native-video-capture', async (_event, opts) => {
   try {
     if (typeof nativeCapture.registerVideoCallback === 'function') {
       let frameCount = 0;
+      let framesDroppedByPacer = 0;
+      let lastForwardedAtMs = 0;
+      // Rate-limit IPC forwarding to targetFps (default 60).
+      // Without this, a 120fps game floods the IPC channel at 660 MB/s
+      // (120 × 1600×900×4 bytes). The renderer IPC queue backs up to ~17 ms
+      // average depth, limiting effective delivery to ~56fps and causing
+      // occasional 119ms spikes. Pacing here halves IPC bandwidth, keeps the
+      // queue clear, and delivers frames already spaced at the target interval
+      // so the renderer never needs to discard or pace further.
+      const forwardIntervalMs = (opts && opts.fps) ? (1000 / opts.fps) : (1000 / 60);
+
       nativeCapture.registerVideoCallback((pixels, meta) => {
         try {
           if (!mainWindow || mainWindow.isDestroyed()) return;
+          const nowMs = Date.now();
+          // Drop frames that arrive too soon after the last forwarded frame.
+          // 0.85× gives 5% headroom above the ideal interval to absorb timer jitter
+          // in the native capture loop without accumulating lag.
+          if (lastForwardedAtMs > 0 && (nowMs - lastForwardedAtMs) < forwardIntervalMs * 0.85) {
+            framesDroppedByPacer++;
+            return;
+          }
+          lastForwardedAtMs = nowMs;
           frameCount++;
-          const forwardedAtEpochMs = Date.now();
+          const forwardedAtEpochMs = nowMs;
           const forwardedMeta = {
             ...meta,
             mainForwardedAtEpochMs: forwardedAtEpochMs,
@@ -445,7 +465,8 @@ ipcMain.handle('start-native-video-capture', async (_event, opts) => {
             console.log('[VIDEO-IPC] First video frame: ' + forwardedMeta.width + 'x' + forwardedMeta.height +
               ' stride=' + forwardedMeta.stride + ' bytes=' + pixels.byteLength);
           } else if (frameCount % 300 === 0) {
-            console.log('[VIDEO-IPC] Video frame #' + frameCount);
+            console.log('[VIDEO-IPC] Video frame #' + frameCount +
+              ' (pacer dropped ' + framesDroppedByPacer + ' total)');
           }
           // Transfer the ArrayBuffer to the renderer (avoids copy)
           mainWindow.webContents.send('game-video-frame', pixels.buffer, forwardedMeta);
@@ -455,7 +476,7 @@ ipcMain.handle('start-native-video-capture', async (_event, opts) => {
           }
         }
       });
-      console.log('[VIDEO-IPC] Video callback registered');
+      console.log('[VIDEO-IPC] Video callback registered (forwardIntervalMs=' + forwardIntervalMs.toFixed(1) + ')');
     }
 
     const result = nativeCapture.startVideoCapture(opts || {});
