@@ -1,5 +1,5 @@
 const { app, BrowserWindow, ipcMain, desktopCapturer } = require('electron');
-const { execFileSync, execSync } = require('child_process');
+const { execFile, execFileSync, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -133,7 +133,7 @@ const KNOWN_GAME_ALIASES = [
  * Detects windows belonging to game processes by checking loaded DirectX/Vulkan modules.
  * Returns Map<hwndString, { name, pid }>.
  */
-function detectGameHwnds() {
+async function detectGameHwnds() {
   // If native addon is available, use it (faster, no PowerShell startup)
   if (nativeCapture && typeof nativeCapture.enumGameWindows === 'function') {
     try {
@@ -152,7 +152,7 @@ function detectGameHwnds() {
     }
   }
 
-  // Fallback: PowerShell detection
+  // Fallback: async PowerShell detection (does not block the main thread)
   try {
     const skipList = WELL_KNOWN_NON_GAMES.map(n => "'" + n + "'").join(',');
     const script = [
@@ -170,10 +170,13 @@ function detectGameHwnds() {
       'if($r.Count -eq 0){"[]"}else{$r|ConvertTo-Json -Compress}',
     ].join('\n');
 
-    const output = execFileSync('powershell.exe',
-      ['-NoProfile', '-NoLogo', '-Command', script],
-      { encoding: 'utf8', timeout: 10000, windowsHide: true }
-    );
+    const output = await new Promise((resolve, reject) => {
+      execFile('powershell.exe',
+        ['-NoProfile', '-NoLogo', '-Command', script],
+        { encoding: 'utf8', timeout: 10000, windowsHide: true },
+        (err, stdout) => err ? reject(err) : resolve(stdout)
+      );
+    });
 
     const trimmed = (output || '').trim();
     if (!trimmed || trimmed === '[]') return new Map();
@@ -349,7 +352,7 @@ ipcMain.handle('get-capture-sources', async () => {
     // Detect game windows
     let gameHwnds = new Map();
     try {
-      gameHwnds = detectGameHwnds();
+      gameHwnds = await detectGameHwnds();
       if (gameHwnds.size > 0) {
         console.log('[GAME-DETECT] Found ' + gameHwnds.size + ' game window(s): ' +
           [...gameHwnds.values()].map(item => item.name).join(', '));

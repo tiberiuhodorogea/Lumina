@@ -259,8 +259,8 @@ static void captureLoop() {
         DXGI_OUTDUPL_FRAME_INFO frameInfo{};
         IDXGIResource* desktopResource = nullptr;
 
-        // Timeout 16 ms — up to ~62 fps poll rate
-        HRESULT hr = g_duplication->AcquireNextFrame(16, &frameInfo, &desktopResource);
+        // Timeout 4 ms — up to ~250 fps poll rate so the pacing gate rarely misses
+        HRESULT hr = g_duplication->AcquireNextFrame(4, &frameInfo, &desktopResource);
 
         if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
             continue;   // desktop unchanged

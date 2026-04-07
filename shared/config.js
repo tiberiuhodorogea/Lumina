@@ -18,18 +18,18 @@ export const config = {
 
   // Video Quality
   video: {
-    width: 1600,
-    height: 900,
+    width: 1920,
+    height: 1080,
     frameRate: 60,
     adaptiveMode: 'smoothness-first',
-    startBitrate: 5500000,
+    startBitrate: 12000000,
     // Hardware encoding: requires NVIDIA GPU with NVENC
     // Fallback: Browser will use H.264 via WebRTC
   },
 
   // Performance
   maxViewersPerHost: 10,
-  maxBitrate: 12000000,
+  maxBitrate: 20000000,
   minBitrate: 2500000,
 
   // WebRTC

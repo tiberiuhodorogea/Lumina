@@ -249,20 +249,20 @@ const logger = new DebugLogger();
 // ============================================
 const SMOOTHNESS_PROFILE = {
   label: 'Auto Smoothness',
-  hint: 'Starts games at 720p/60 and only recovers upward after a stable window',
-  summary: 'Smoothness-first game profile with a 1600x900 / 60 ceiling and conservative warm-up',
-  maxWidth: 1600,
-  maxHeight: 900,
+  hint: 'Starts at full quality and degrades fast if needed',
+  summary: 'Smoothness-first game profile with a 1080p / 60 ceiling and best-effort bitrate',
+  maxWidth: 1920,
+  maxHeight: 1080,
   maxFrameRate: 60,
-  maxBitrate: 12_000_000,
-  startBitrate: 5_500_000,
+  maxBitrate: 20_000_000,
+  startBitrate: 12_000_000,
   minBitrate: 2_500_000,
-  startTierIndex: 1,
-  recoverWaitMs: 12_000,
-  recoverCooldownMs: 6_000,
-  startupRampMs: 15_000,
-  nativeMaxWidth: 1600,
-  nativeMaxHeight: 900,
+  startTierIndex: 0,
+  recoverWaitMs: 4_000,
+  recoverCooldownMs: 3_000,
+  startupRampMs: 8_000,
+  nativeMaxWidth: 1920,
+  nativeMaxHeight: 1080,
 };
 
 // ============================================
@@ -286,7 +286,7 @@ class AdaptiveQualityController {
   constructor(luminaApp) {
     this.app = luminaApp;
     this.enabled = true;
-    this.defaultStartupTierIndex = 1;
+    this.defaultStartupTierIndex = 0;
     this.startupTierIndex = this.defaultStartupTierIndex;
     this.tierIndex = this.startupTierIndex;
     this.profileMaxBitrate = SMOOTHNESS_PROFILE.maxBitrate;
@@ -325,39 +325,41 @@ class AdaptiveQualityController {
     this._lastHealthState = 'starting';
     this._warningStreak = 0;
     this._isolatedStreak = 0;
+    this._consecutiveDegrades = 0;
 
     this.degradeCooldownMs = 2500;
     this.warningDegradeCooldownMs = 6000;
     this.defaultRecoverCooldownMs = 1500;
-    this.defaultRecoverWaitMs = 2500;
-    this.defaultStartupRampMs = 4000;
+    this.defaultRecoverWaitMs = 4000;
+    this.defaultStartupRampMs = 8000;
     this.recoverCooldownMs = this.defaultRecoverCooldownMs;
     this.recoverWaitMs = this.defaultRecoverWaitMs;
     this.startupRampMs = this.defaultStartupRampMs;
 
     this.jitterWarnMs = 55;
     this.jitterCriticalMs = 85;
-    // Native DXGI capture produces avg ~100 ms jitter-buffer at the receiver
-    // (vs ~50 ms for screen-capture streams). Thresholds are calibrated for
-    // native DXGI so the ABR doesn't false-warn on normal operation.
-    this.jitterBufferWarnMs = 145;
-    this.jitterBufferCriticalMs = 200;
-    this.jitterBufferGrowthWarnMs = 4.0;
-    this.jitterBufferGrowthCriticalMs = 10.0;
-    this.sustainedJitterBufferWarnMs = 110;
-    this.sustainedJitterBufferCriticalMs = 155;
+    // Native DXGI capture produces avg ~100 ms jitter-buffer on LAN receivers
+    // and ~140-150 ms on internet paths. Thresholds are set wide enough that
+    // normal internet latency does not trigger false warnings — only genuine
+    // congestion (growing buffers, rising jitter) should fire.
+    this.jitterBufferWarnMs = 200;
+    this.jitterBufferCriticalMs = 300;
+    this.jitterBufferGrowthWarnMs = 5.0;
+    this.jitterBufferGrowthCriticalMs = 12.0;
+    this.sustainedJitterBufferWarnMs = 160;
+    this.sustainedJitterBufferCriticalMs = 220;
     this.decodeLatencyWarnMs = 18;
     this.decodeLatencyCriticalMs = 30;
     this.lossWarnRate = 0.03;
     this.lossCriticalRate = 0.06;
     this.recoveryProbeMs = 12000;
-    this.recoveryJitterBufferMaxMs = 135; // native DXGI steady-state ~100 ms
-    this.fullRecoveryJitterBufferMaxMs = 120; // native DXGI steady-state ~100 ms
+    this.recoveryJitterBufferMaxMs = 180; // internet steady-state ~140-150 ms
+    this.fullRecoveryJitterBufferMaxMs = 160; // internet steady-state ~140-150 ms
     this.fullRecoveryJitterBufferDeltaMaxMs = 0.75;
     this.playoutDeltaWarnToleranceMs = 180;
     this.playoutDeltaCriticalToleranceMs = 260;
     this.fullRecoveryPlayoutDeltaToleranceMs = 160;
-    this.fullRecoveryHoldMs = 8000;
+    this.fullRecoveryHoldMs = 4000;
     this.receiverSettleGraceMs = 10000;
     this.senderStressEncodeWarnRatio = 0.82;
     this.senderStressSourceWarnRatio = 0.85;
@@ -479,6 +481,18 @@ class AdaptiveQualityController {
 
   removeViewer(viewerId) {
     this.viewerHealth.delete(viewerId);
+    // Reset to best tier when no viewers remain — don't stay degraded for nobody
+    if (this.viewerHealth.size === 0 && this.tierIndex !== this.startupTierIndex) {
+      logger.info('[ABR] No viewers — reset to ' + this.tiers[this.startupTierIndex].label +
+        ' (was ' + this.currentTier.label + ')');
+      this.tierIndex = this.startupTierIndex;
+      this._warningStreak = 0;
+      this._isolatedStreak = 0;
+      this._consecutiveDegrades = 0;
+      this.goodHealthStart = 0;
+      this._lastHealthState = 'starting';
+      this._applyTier();
+    }
   }
 
   onServerBwe(bweData) {
@@ -661,9 +675,12 @@ class AdaptiveQualityController {
       this._warningStreak++;
       this._isolatedStreak = 0;
       this.goodHealthStart = 0;
+      // Escalate cooldown with consecutive degrades to prevent rapid cascading
+      const escalatedCooldown = this.warningDegradeCooldownMs +
+        Math.min(3, this._consecutiveDegrades || 0) * 4000;
       if (this._warningStreak >= 3 &&
           this._shouldDegradeOnWarning(assessment) &&
-          now - this.lastDegradeTime >= this.warningDegradeCooldownMs) {
+          now - this.lastDegradeTime >= escalatedCooldown) {
         this._stepDown(1, assessment);
         this._stuckAtMinSince = 0;
       }
@@ -672,9 +689,11 @@ class AdaptiveQualityController {
       this._isolatedStreak++;
       this.goodHealthStart = 0;
       const isolatedThreshold = assessment.state === 'isolated-critical' ? 2 : 4;
+      const isolatedEscalatedCooldown = this.warningDegradeCooldownMs +
+        Math.min(3, this._consecutiveDegrades || 0) * 4000;
       if (this._isolatedStreak >= isolatedThreshold &&
           this._shouldDegradeOnWarning(assessment) &&
-          now - this.lastDegradeTime >= this.warningDegradeCooldownMs) {
+          now - this.lastDegradeTime >= isolatedEscalatedCooldown) {
         this._stepDown(1, assessment);
         this._stuckAtMinSince = 0;
       }
@@ -1002,16 +1021,19 @@ class AdaptiveQualityController {
 
   _shouldDegradeOnWarning(assessment) {
     const aggregate = assessment.aggregate;
-    const currentTargetMbps = this.effectiveBitrate / 1e6;
+    const actualEncodeMbps = this._producerStats.bitrateMbps || 0;
     const viewerDeliveryMbps = Math.max(this._getMinViewerBitrate(), aggregate?.minDeliveryMbps || 0);
     const availableMbps = aggregate?.minAvailableMbps || 0;
     const transportPressure =
       (aggregate?.worstRttMs || 0) > this.rttWarnMs ||
       (aggregate?.worstNackRate || 0) > this.nackRateWarn ||
       (aggregate?.minScore != null && aggregate.minScore <= this.scoreWarn);
+    // Compare headroom against actual encode rate, not tier target.
+    // If BWE available (8 Mbps) exceeds what the encoder actually sends (5 Mbps),
+    // there's no congestion even if the tier target is 20 Mbps.
     const headroomTight =
-      (availableMbps > 0 && availableMbps < currentTargetMbps * 0.9) ||
-      (viewerDeliveryMbps > 0 && viewerDeliveryMbps < currentTargetMbps * 0.72);
+      (availableMbps > 0 && actualEncodeMbps > 0.5 && availableMbps < actualEncodeMbps * 1.15) ||
+      (viewerDeliveryMbps > 0 && actualEncodeMbps > 0.5 && viewerDeliveryMbps < actualEncodeMbps * 0.6);
     const decodePressure = (assessment.worstDecodeLatency || 0) > this.decodeLatencyWarnMs;
     const latencyPressure = (assessment.worstJitterBuffer || 0) > this.recoveryJitterBufferMaxMs;
     const bufferGrowthPressure = (assessment.worstJitterBufferDelta || 0) > this.jitterBufferGrowthWarnMs;
@@ -1078,6 +1100,7 @@ class AdaptiveQualityController {
     this._producerStats.stressSeconds = 0;
     this._producerStats.stressReason = null;
     this._producerStats.lastLoggedStressSeconds = 0;
+    this._consecutiveDegrades = (this._consecutiveDegrades || 0) + 1;
     if (this.tierIndex !== prevTier) {
       for (const [, health] of this.viewerHealth) {
         health.baselineSamples = 0;
@@ -1119,6 +1142,7 @@ class AdaptiveQualityController {
     this._producerStats.stressSeconds = 0;
     this._producerStats.stressReason = null;
     this._producerStats.lastLoggedStressSeconds = 0;
+    this._consecutiveDegrades = Math.max(0, (this._consecutiveDegrades || 0) - 1);
     if (this.tierIndex !== prevTier) {
       for (const [, health] of this.viewerHealth) {
         health.baselineSamples = 0;
@@ -2495,15 +2519,21 @@ class LuminaApp {
               let frame = null;
               let writeDurationMs = null;
               try {
-                this._recordNativeFrameTelemetry(nextFrame.meta);
-                this._recordNativePipelineMetric('captureToMain', nextFrame.meta?.captureToMainMs);
-                this._recordNativePipelineMetric('mainToRenderer', nextFrame.mainToRendererMs);
-                this._recordNativePipelineMetric('captureToRenderer', nextFrame.captureToRendererMs);
+                // Sample telemetry every 10th frame to reduce hot-path overhead
+                const sampleTelemetry = (this._nativeVideoFrameCount % 10 === 0);
+                if (sampleTelemetry) {
+                  this._recordNativeFrameTelemetry(nextFrame.meta);
+                  this._recordNativePipelineMetric('captureToMain', nextFrame.meta?.captureToMainMs);
+                  this._recordNativePipelineMetric('mainToRenderer', nextFrame.mainToRendererMs);
+                  this._recordNativePipelineMetric('captureToRenderer', nextFrame.captureToRendererMs);
+                }
                 const writeStartedAtMs = Date.now();
                 const rendererQueueMs = nextFrame.receivedAtEpochMs != null
                   ? Math.max(0, writeStartedAtMs - nextFrame.receivedAtEpochMs)
                   : null;
-                this._recordNativePipelineMetric('rendererQueue', rendererQueueMs);
+                if (sampleTelemetry) {
+                  this._recordNativePipelineMetric('rendererQueue', rendererQueueMs);
+                }
                 frame = new VideoFrame(new Uint8Array(nextFrame.buffer), {
                   format: 'BGRA',
                   codedWidth: nextFrame.meta.width,
@@ -2517,8 +2547,11 @@ class LuminaApp {
                 const submitMs = nextFrame.meta?.epochTimestampUs
                   ? Math.max(0, Date.now() - (nextFrame.meta.epochTimestampUs / 1000))
                   : null;
-                this._recordNativePipelineMetric('writeDuration', writeDurationMs);
-                this._recordNativePipelineMetric('submit', submitMs);
+                if (sampleTelemetry) {
+                  this._recordNativePipelineMetric('writeDuration', writeDurationMs);
+                  this._recordNativePipelineMetric('submit', submitMs);
+                }
+                // Always check for severe lag (cheap branch, only logs rarely)
                 this._maybeLogNativePipelineLag({
                   captureToMainMs: nextFrame.meta?.captureToMainMs ?? null,
                   mainToRendererMs: nextFrame.mainToRendererMs,
@@ -2638,16 +2671,21 @@ class LuminaApp {
       if (!this._nativeVideoActive || !this._nativeVideoCtx) return;
       try {
         const receivedAtEpochMs = Date.now();
-        this._recordNativeFrameTelemetry(meta);
-        this._recordNativePipelineMetric('captureToMain', meta?.captureToMainMs);
+        const sampleTelemetry = (this._nativeVideoFrameCount % 10 === 0);
+        if (sampleTelemetry) {
+          this._recordNativeFrameTelemetry(meta);
+          this._recordNativePipelineMetric('captureToMain', meta?.captureToMainMs);
+        }
         const mainToRendererMs = meta?.mainForwardedAtEpochMs != null
           ? Math.max(0, receivedAtEpochMs - meta.mainForwardedAtEpochMs)
           : null;
         const captureToRendererMs = meta?.epochTimestampUs
           ? Math.max(0, receivedAtEpochMs - (meta.epochTimestampUs / 1000))
           : null;
-        this._recordNativePipelineMetric('mainToRenderer', mainToRendererMs);
-        this._recordNativePipelineMetric('captureToRenderer', captureToRendererMs);
+        if (sampleTelemetry) {
+          this._recordNativePipelineMetric('mainToRenderer', mainToRendererMs);
+          this._recordNativePipelineMetric('captureToRenderer', captureToRendererMs);
+        }
         // BGRA → RGBA byte swap (DXGI delivers BGRA, ImageData expects RGBA)
         const paintStartedAtMs = Date.now();
         const u8 = new Uint8Array(buffer);
@@ -2666,8 +2704,10 @@ class LuminaApp {
           ? Math.max(0, Date.now() - (meta.epochTimestampUs / 1000))
           : null;
         const writeDurationMs = Math.max(0, Date.now() - paintStartedAtMs);
-        this._recordNativePipelineMetric('submit', submitMs);
-        this._recordNativePipelineMetric('writeDuration', writeDurationMs);
+        if (sampleTelemetry) {
+          this._recordNativePipelineMetric('submit', submitMs);
+          this._recordNativePipelineMetric('writeDuration', writeDurationMs);
+        }
         this._maybeLogNativePipelineLag({
           captureToMainMs: meta?.captureToMainMs ?? null,
           mainToRendererMs,

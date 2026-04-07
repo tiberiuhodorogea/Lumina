@@ -752,6 +752,14 @@ class ViewerApp {
       this.consumers.set(consumer.id, consumer);
       this.remoteStream.addTrack(consumer.track);
 
+      // Request minimal playout buffer — prefer low latency over smooth playout.
+      // Setting the same hint on both audio and video keeps them in sync so
+      // the receiver doesn't drift one track ahead of the other.
+      if (consumer.rtpReceiver && 'playoutDelayHint' in consumer.rtpReceiver) {
+        consumer.rtpReceiver.playoutDelayHint = 0.05; // 50ms
+        debugConsole.info('[SFU] Set playoutDelayHint=50ms on ' + consumer.kind + ' consumer');
+      }
+
       // Resume consumer on the server (they start paused)
       this.socket.emit('consumer-resume', { consumerId: consumer.id });
 
@@ -793,6 +801,11 @@ class ViewerApp {
       this.consumers.set(consumer.id, consumer);
       if (this.remoteStream) {
         this.remoteStream.addTrack(consumer.track);
+      }
+
+      if (consumer.rtpReceiver && 'playoutDelayHint' in consumer.rtpReceiver) {
+        consumer.rtpReceiver.playoutDelayHint = 0.05; // 50ms — match startConsuming
+        debugConsole.info('[SFU] Set playoutDelayHint=50ms on new ' + consumer.kind + ' consumer');
       }
 
       this.socket.emit('consumer-resume', { consumerId: consumer.id });

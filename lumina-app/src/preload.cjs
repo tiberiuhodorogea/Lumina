@@ -33,19 +33,14 @@ function ensureNativeVideoCallback() {
       return;
     }
 
-    const forwardedAtEpochMs = Date.now();
-    const forwardedMeta = {
-      ...meta,
-      mainForwardedAtEpochMs: forwardedAtEpochMs,
-      bridgeForwardedAtEpochMs: forwardedAtEpochMs,
-      bridgeMode: 'preload-direct',
-      captureToBridgeMs: meta?.epochTimestampUs
-        ? Math.max(0, forwardedAtEpochMs - (meta.epochTimestampUs / 1000))
-        : null,
-    };
+    // Preload-direct: no main process hop. Forward with minimal overhead.
+    // Reuse meta object directly — avoid spread/allocation on every frame.
+    meta.mainForwardedAtEpochMs = Date.now();
+    meta.bridgeForwardedAtEpochMs = meta.mainForwardedAtEpochMs;
+    meta.bridgeMode = 'preload-direct';
 
     try {
-      nativeVideoListener(pixels.buffer, forwardedMeta);
+      nativeVideoListener(pixels.buffer, meta);
     } catch (err) {
       console.warn('[PRELOAD] Direct native video callback failed:', err.message);
     }

@@ -253,12 +253,7 @@ const MEDIA_CODECS = [
     clockRate: 48000,
     channels: 2,
   },
-  {
-    kind: 'video',
-    mimeType: 'video/VP8',
-    clockRate: 90000,
-    parameters: {},
-  },
+  // H.264 High 5.0 first — better quality-per-bit than VP8 and widest HW decode support
   {
     kind: 'video',
     mimeType: 'video/H264',
@@ -268,6 +263,20 @@ const MEDIA_CODECS = [
       'profile-level-id': '640032',
       'level-asymmetry-allowed': 1,
     },
+  },
+  // AV1 — best efficiency, used when both sides have HW encode/decode
+  {
+    kind: 'video',
+    mimeType: 'video/AV1',
+    clockRate: 90000,
+    parameters: {},
+  },
+  // VP8 fallback — universal browser support
+  {
+    kind: 'video',
+    mimeType: 'video/VP8',
+    clockRate: 90000,
+    parameters: {},
   },
 ];
 
